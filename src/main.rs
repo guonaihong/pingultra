@@ -6,6 +6,7 @@ mod monitor;
 mod output;
 mod pinger;
 mod stats;
+mod ui;
 
 use anyhow::Result;
 use cli::Cli;
@@ -26,6 +27,13 @@ use tokio::sync::mpsc;
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     
+    // 检查是否使用UI模式（只有在Monitor子命令中才有UI选项）
+    let using_ui = if let Some(cli::Commands::Monitor { ui, .. }) = &cli.command {
+        *ui
+    } else {
+        false
+    };
+    
     // 处理子命令
     if let Some(command) = &cli.command {
         match command {
@@ -33,12 +41,15 @@ async fn main() -> Result<()> {
                 // 摘要命令需要在收集完统计信息后处理
                 // 所以这里不立即返回
             },
-            cli::Commands::Monitor { network, interval, format, changes_only, resolve_mac } => {
+            cli::Commands::Monitor { network, interval, format, changes_only, resolve_mac, ui } => {
                 // 启动网络监控模式
-                match NetworkMonitor::new(network, *interval, *resolve_mac, *changes_only) {
+                match NetworkMonitor::new(network, *interval, *resolve_mac, *changes_only, *ui) {
                     Ok(mut monitor) => {
                         if let Err(e) = monitor.start_monitoring().await {
-                            eprintln!("Error during network monitoring: {}", e);
+                            // 只有在非UI模式下才打印错误信息到控制台
+                            if !*ui {
+                                eprintln!("Error during network monitoring: {}", e);
+                            }
                             process::exit(1);
                         }
                         return Ok(());
@@ -97,7 +108,7 @@ async fn main() -> Result<()> {
             Ok(addr) => {
                 let target = PingTarget::new(host_str.clone(), addr);
                 
-                if !cli.quiet {
+                if !cli.quiet && !using_ui {
                     print_ping_start(&target.name, &target.addr.to_string(), cli.size);
                 }
                 
@@ -140,7 +151,7 @@ async fn main() -> Result<()> {
     
     // Process results as they come in
     while let Some(response) = rx.recv().await {
-        if !cli.quiet {
+        if !cli.quiet && !using_ui {
             print_ping_result(&response, cli.timestamp);
         }
         

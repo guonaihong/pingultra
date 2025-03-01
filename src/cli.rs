@@ -77,5 +77,9 @@ pub enum Commands {
         /// Resolve MAC addresses to vendor names when possible
         #[arg(short = 'm', long)]
         resolve_mac: bool,
+        
+        /// Use character-based UI for monitoring
+        #[arg(short = 'u', long)]
+        ui: bool,
     },
 }

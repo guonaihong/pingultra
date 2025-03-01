@@ -20,6 +20,9 @@ pub enum PingError {
     
     #[error("Failed to resolve hostname: {0}")]
     ResolutionError(String),
+    
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 pub type PingResult<T> = Result<T, PingError>;
