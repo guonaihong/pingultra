@@ -261,15 +261,22 @@ impl CharacterUI {
         hostname_width: usize,
         vendor_width: usize,
     ) -> io::Result<()> {
+        let ip_width: usize = 16;
+        let alive_width: usize = 12;
+        let mac_width: usize = 13;
+        let hostname_width: usize = 18;
+        let vendor_width: usize = 13;
         let header = if self.show_details {
             format!(
-                "{:<ip_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$} {}",
+                "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$} {}",
                 "IP",
+                "存活时间",
                 "MAC",
                 "Hostname",
                 "Vendor",
                 "Status",
                 ip_w = ip_width,
+                alive_w = alive_width,
                 mac_w = mac_width,
                 host_w = hostname_width,
                 vendor_w = vendor_width
@@ -291,12 +298,17 @@ impl CharacterUI {
         stdout: &mut io::Stdout,
         device: &DeviceUIInfo,
         is_highlighted: bool,
-        ip_width: usize,
-        mac_width: usize,
-        hostname_width: usize,
-        vendor_width: usize,
+        _ip_width: usize,
+        _mac_width: usize,
+        _hostname_width: usize,
+        _vendor_width: usize,
         terminal_width: u16,
     ) -> io::Result<()> {
+        let ip_width: usize = 16;
+        let alive_width: usize = 12;
+        let mac_width: usize = 13;
+        let hostname_width: usize = 18;
+        let vendor_width: usize = 13;
         let (status_str, status_style) = match device.status {
             DeviceUIStatus::Online => (" Online ", Color::Green),
             DeviceUIStatus::Offline => (" Offline ", Color::Red),
@@ -328,14 +340,23 @@ impl CharacterUI {
             .take(vendor_width.saturating_sub(2))
             .collect::<String>();
 
+        // 计算存活时间
+        let duration = device.last_seen.signed_duration_since(device.first_seen);
+        let hours = duration.num_hours();
+        let minutes = duration.num_minutes() % 60;
+        let seconds = duration.num_seconds() % 60;
+        let alive_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
+
         let row_content = if self.show_details {
             format!(
-                "{:<ip_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$}",
+                "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$}",
                 device.ip.to_string(),
+                alive_str,
                 mac,
                 hostname,
                 vendor,
                 ip_w = ip_width,
+                alive_w = alive_width,
                 mac_w = mac_width,
                 host_w = hostname_width,
                 vendor_w = vendor_width
@@ -469,5 +490,33 @@ impl CharacterUI {
         let start_idx = self.scroll_offset.min(device_count.saturating_sub(1));
         let end_idx = (start_idx + visible_rows).min(device_count);
         (start_idx, end_idx)
+    }
+
+    pub fn format_device_info(&self, device: &DeviceUIInfo) -> String {
+        let mut parts = Vec::new();
+
+        // 添加IP地址
+        parts.push(device.ip.to_string());
+
+        // 添加存活时间信息
+        let duration = device.last_seen.signed_duration_since(device.first_seen);
+        let hours = duration.num_hours();
+        let minutes = duration.num_minutes() % 60;
+        let seconds = duration.num_seconds() % 60;
+        parts.push(format!("存活时间: {:02}:{:02}:{:02}", hours, minutes, seconds));
+
+        if let Some(ref mac) = device.mac {
+            parts.push(format!("MAC: {}", mac));
+        }
+
+        if let Some(ref hostname) = device.hostname {
+            parts.push(format!("Host: {}", hostname));
+        }
+
+        if let Some(ref vendor) = device.vendor {
+            parts.push(format!("Vendor: {}", vendor));
+        }
+
+        parts.join(" | ")
     }
 }
