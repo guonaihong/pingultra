@@ -32,6 +32,7 @@ pub struct DeviceUIInfo {
     pub first_seen: DateTime<Local>,
     pub last_seen: DateTime<Local>,
     pub last_status_change: Instant,
+    pub offline_at: Option<DateTime<Local>>,
 }
 
 impl From<&DeviceInfo> for DeviceUIInfo {
@@ -45,6 +46,7 @@ impl From<&DeviceInfo> for DeviceUIInfo {
             first_seen: info.first_seen,
             last_seen: info.last_seen,
             last_status_change: Instant::now(),
+            offline_at: None,
         }
     }
 }
@@ -99,6 +101,7 @@ impl CharacterUI {
             if device.status != DeviceUIStatus::Offline && device.status != DeviceUIStatus::Lost {
                 device.status = DeviceUIStatus::Offline;
                 device.last_status_change = Instant::now();
+                device.offline_at = Some(Local::now());
             }
         }
     }
@@ -479,24 +482,12 @@ impl CharacterUI {
 
     fn get_sorted_devices(&self) -> Vec<DeviceUIInfo> {
         let devices = self.devices.lock().unwrap();
-        let mut sorted: Vec<DeviceUIInfo> = devices.values().cloned().collect();
-
-        if self.sort_by_ip {
-            sorted.sort_by_key(|d| d.ip);
-        } else {
-            sorted.sort_by(|a, b| {
-                let status_order = |s: &DeviceUIStatus| match s {
-                    DeviceUIStatus::Online => 0,
-                    DeviceUIStatus::New => 1,
-                    DeviceUIStatus::Offline => 2,
-                    DeviceUIStatus::Lost => 3,
-                };
-                status_order(&a.status)
-                    .cmp(&status_order(&b.status))
-                    .then_with(|| a.ip.cmp(&b.ip))
-            });
-        }
-        sorted
+        let mut online: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Online || d.status == DeviceUIStatus::New).collect();
+        let mut offline: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Offline || d.status == DeviceUIStatus::Lost).collect();
+        online.sort_by_key(|d| d.ip);
+        offline.sort_by(|a, b| b.offline_at.cmp(&a.offline_at).then_with(|| a.ip.cmp(&b.ip)));
+        online.extend(offline);
+        online
     }
 
     /// 计算可见范围，并修正 highlight_index 和 scroll_offset，返回 (start_idx, end_idx, highlight_index, scroll_offset)

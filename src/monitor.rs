@@ -24,6 +24,7 @@ pub struct DeviceInfo {
     pub vendor: Option<String>,
     pub first_seen: DateTime<Local>,
     pub last_seen: DateTime<Local>,
+    pub offline_at: Option<DateTime<Local>>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,6 +228,7 @@ impl NetworkMonitor {
                         vendor: Some("Local".to_string()),
                         first_seen: existing.first_seen,
                         last_seen: now,
+                        offline_at: None,
                     }
                 } else {
                     // 新设备
@@ -237,6 +239,7 @@ impl NetworkMonitor {
                         vendor: Some("Local".to_string()),
                         first_seen: now,
                         last_seen: now,
+                        offline_at: None,
                     };
 
                     changes.push(DeviceStatus::Added(new_device.clone()));
@@ -331,6 +334,7 @@ impl NetworkMonitor {
                             vendor,
                             first_seen: existing.first_seen,
                             last_seen: now,
+                            offline_at: None,
                         }
                     } else {
                         // 新设备
@@ -341,6 +345,7 @@ impl NetworkMonitor {
                             vendor,
                             first_seen: now,
                             last_seen: now,
+                            offline_at: None,
                         };
 
                         changes.push(DeviceStatus::Added(new_device.clone()));
@@ -666,7 +671,8 @@ pub fn export_to_json(devices: &[DeviceStatus]) -> Result<String, serde_json::Er
                         "hostname": device.hostname,
                         "vendor": device.vendor,
                         "first_seen": device.first_seen.to_rfc3339(),
-                        "last_seen": device.last_seen.to_rfc3339()
+                        "last_seen": device.last_seen.to_rfc3339(),
+                        "offline_at": device.offline_at.as_ref().map(|dt| dt.to_rfc3339()),
                     })
                 },
                 DeviceStatus::Removed(device) => {
@@ -677,7 +683,8 @@ pub fn export_to_json(devices: &[DeviceStatus]) -> Result<String, serde_json::Er
                         "hostname": device.hostname,
                         "vendor": device.vendor,
                         "first_seen": device.first_seen.to_rfc3339(),
-                        "last_seen": device.last_seen.to_rfc3339()
+                        "last_seen": device.last_seen.to_rfc3339(),
+                        "offline_at": device.offline_at.as_ref().map(|dt| dt.to_rfc3339()),
                     })
                 },
                 DeviceStatus::Stable(device) => {
@@ -688,7 +695,8 @@ pub fn export_to_json(devices: &[DeviceStatus]) -> Result<String, serde_json::Er
                         "hostname": device.hostname,
                         "vendor": device.vendor,
                         "first_seen": device.first_seen.to_rfc3339(),
-                        "last_seen": device.last_seen.to_rfc3339()
+                        "last_seen": device.last_seen.to_rfc3339(),
+                        "offline_at": device.offline_at.as_ref().map(|dt| dt.to_rfc3339()),
                     })
                 }
             }
@@ -711,6 +719,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
         "vendor",
         "first_seen",
         "last_seen",
+        "offline_at",
     ]) {
         Ok(_) => (),
         Err(e) => return Err(e),
@@ -727,6 +736,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
+                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
@@ -741,6 +751,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
+                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
@@ -755,6 +766,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
+                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
