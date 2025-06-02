@@ -136,6 +136,8 @@ impl CharacterUI {
                         }
                         KeyCode::Up => self.handle_up_key(),
                         KeyCode::Down => self.handle_down_key()?,
+                        KeyCode::PageUp => self.handle_page_up()?,
+                        KeyCode::PageDown => self.handle_page_down()?,
                         _ => {}
                     }
                 }
@@ -156,7 +158,7 @@ impl CharacterUI {
         if self.highlight_index > 0 {
             self.highlight_index -= 1;
             if self.highlight_index < self.scroll_offset {
-                self.scroll_offset = self.highlight_index.saturating_sub(1);
+                self.scroll_offset = self.highlight_index;
             }
         }
     }
@@ -170,11 +172,38 @@ impl CharacterUI {
         if self.highlight_index < device_count - 1 {
             self.highlight_index += 1;
             let (_, height) = terminal::size()?;
-            let visible_rows = (height as usize).saturating_sub(6); // 调整可视区域计算
-
+            let visible_rows = (height as usize).saturating_sub(6);
             if self.highlight_index >= self.scroll_offset + visible_rows {
-                self.scroll_offset += 1;
+                self.scroll_offset = self.highlight_index + 1 - visible_rows;
             }
+        }
+        Ok(())
+    }
+
+    fn handle_page_up(&mut self) -> io::Result<()> {
+        let (_, height) = terminal::size()?;
+        let visible_rows = (height as usize).saturating_sub(6);
+        if self.highlight_index > 0 {
+            if self.highlight_index >= visible_rows {
+                self.highlight_index -= visible_rows;
+            } else {
+                self.highlight_index = 0;
+            }
+            self.scroll_offset = self.highlight_index;
+        }
+        Ok(())
+    }
+
+    fn handle_page_down(&mut self) -> io::Result<()> {
+        let device_count = self.devices.lock().unwrap().len();
+        if device_count == 0 {
+            return Ok(());
+        }
+        let (_, height) = terminal::size()?;
+        let visible_rows = (height as usize).saturating_sub(6);
+        if self.highlight_index < device_count - 1 {
+            self.highlight_index = (self.highlight_index + visible_rows).min(device_count - 1);
+            self.scroll_offset = self.highlight_index + 1 - visible_rows;
         }
         Ok(())
     }
@@ -187,50 +216,38 @@ impl CharacterUI {
         )?;
 
         let (width, height) = terminal::size()?;
-        let visible_rows = (height as usize).saturating_sub(6); // 标题2行 + 表头1行 + 分隔线1行 + 统计2行
+        let visible_rows = (height as usize).saturating_sub(6);
 
-        // 动态列宽计算
-        let (ip_width, mac_width, hostname_width, vendor_width) = if self.show_details {
-            let details_width = (width.saturating_sub(16 + 12) / 3) as usize; // IP(16) + Status(12) 剩余空间分给其他三列
-            (16, details_width, details_width, details_width)
-        } else {
-            (width.saturating_sub(12) as usize, 0, 0, 0)
-        };
-
-        // 渲染标题
         self.render_title(stdout, width)?;
+        self.render_table_header(stdout, 16, 13, 18, 13)?;
 
-        // 渲染表头
-        self.render_table_header(stdout, ip_width, mac_width, hostname_width, vendor_width)?;
-
-        // 获取并排序设备数据
         let devices = self.get_sorted_devices();
-
-        // 计算可见范围
-        let (start_idx, end_idx) = self.calculate_visible_range(devices.len(), visible_rows);
+        let device_count = devices.len();
+        let (start_idx, end_idx, highlight_index, scroll_offset) = Self::calculate_visible_range_and_highlight(
+            device_count,
+            visible_rows,
+            self.highlight_index,
+            self.scroll_offset,
+        );
         let visible_devices = &devices[start_idx..end_idx];
 
-        // 渲染设备行
         for (idx, device) in visible_devices.iter().enumerate() {
             let absolute_idx = start_idx + idx;
             self.render_device_row(
                 stdout,
                 device,
-                absolute_idx == self.highlight_index,
-                ip_width,
-                mac_width,
-                hostname_width,
-                vendor_width,
+                absolute_idx == highlight_index,
+                16,
+                13,
+                18,
+                13,
                 width,
+                idx,
             )?;
         }
 
-        // 填充空白行
         self.fill_remaining_rows(stdout, visible_devices.len(), visible_rows, width)?;
-
-        // 渲染底部信息
         self.render_footer(stdout, &devices, width, height)?;
-
         stdout.flush()
     }
 
@@ -303,6 +320,7 @@ impl CharacterUI {
         _hostname_width: usize,
         _vendor_width: usize,
         terminal_width: u16,
+        row_idx: usize,
     ) -> io::Result<()> {
         let ip_width: usize = 16;
         let alive_width: usize = 12;
@@ -369,8 +387,7 @@ impl CharacterUI {
             )
         };
 
-        // 使用传入的参数计算行号
-        let y_pos = 4 + self.devices.lock().unwrap().iter().position(|(ip, _)| *ip == device.ip).unwrap_or(0) as u16;
+        let y_pos = 4 + row_idx as u16;
 
         execute!(
             stdout,
@@ -482,14 +499,21 @@ impl CharacterUI {
         sorted
     }
 
-    fn calculate_visible_range(
-        &self,
+    /// 计算可见范围，并修正 highlight_index 和 scroll_offset，返回 (start_idx, end_idx, highlight_index, scroll_offset)
+    fn calculate_visible_range_and_highlight(
         device_count: usize,
         visible_rows: usize,
-    ) -> (usize, usize) {
-        let start_idx = self.scroll_offset.min(device_count.saturating_sub(1));
+        highlight_index: usize,
+        scroll_offset: usize,
+    ) -> (usize, usize, usize, usize) {
+        let mut hi = highlight_index.min(device_count.saturating_sub(1));
+        let mut so = scroll_offset.min(hi);
+        if hi < so {
+            so = hi;
+        }
+        let start_idx = so.min(device_count.saturating_sub(1));
         let end_idx = (start_idx + visible_rows).min(device_count);
-        (start_idx, end_idx)
+        (start_idx, end_idx, hi, so)
     }
 
     pub fn format_device_info(&self, device: &DeviceUIInfo) -> String {
