@@ -17,7 +17,23 @@ PingUltra 是一个用 Rust 实现的高性能网络 ping 工具，是 fping 的
 
 ## 安装
 
+### 使用 cargo install（推荐）
+
+最简单的安装方式，直接从源码编译并安装到 `~/.cargo/bin/`：
+
+```bash
+cargo install --git https://github.com/guonaihong/pingultra.git
+```
+
+安装完成后，可以直接运行（需要 root 权限）：
+
+```bash
+sudo pingultra 8.8.8.8
+```
+
 ### 从源码编译
+
+如果你想手动编译和安装：
 
 确保你已经安装了 Rust 和 Cargo：
 
@@ -29,8 +45,18 @@ cd pingultra
 # 编译
 cargo build --release
 
-# 安装（可选）
+# 安装到系统路径（可选）
 sudo cp target/release/pingultra /usr/local/bin/
+```
+
+编译完成后，可以通过以下方式运行：
+
+```bash
+# 使用编译后的二进制文件
+sudo ./target/release/pingultra 8.8.8.8
+
+# 或者安装到系统路径后
+sudo pingultra 8.8.8.8
 ```
 
 ## 使用方法
