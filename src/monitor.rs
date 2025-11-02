@@ -138,14 +138,16 @@ impl NetworkMonitor {
                         DeviceStatus::Added(device) => {
                             // eprintln!("UI mode: Adding new device {}", device.ip);
                             ui_instance.update_device(device, DeviceUIStatus::New);
+                            ui_instance.update_device_status(&device.ip, true);
                         }
                         DeviceStatus::Removed(device) => {
                             // eprintln!("UI mode: Marking device {} as offline", device.ip);
-                            ui_instance.update_device(device, DeviceUIStatus::Offline);
+                            ui_instance.update_device_status(&device.ip, false);
                         }
                         DeviceStatus::Stable(device) => {
                             // eprintln!("UI mode: Updating stable device {}", device.ip);
                             ui_instance.update_device(device, DeviceUIStatus::Online);
+                            ui_instance.update_device_status(&device.ip, true);
                         }
                     }
                 }

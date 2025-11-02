@@ -18,8 +18,16 @@ use crate::monitor::DeviceInfo;
 pub enum DeviceUIStatus {
     Online,
     Offline,
+    Unstable,
     New,
     Lost,
+}
+
+#[derive(Debug, Clone)]
+pub struct OfflineEvent {
+    pub offline_at: DateTime<Local>,
+    pub online_at: Option<DateTime<Local>>,
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +41,9 @@ pub struct DeviceUIInfo {
     pub last_seen: DateTime<Local>,
     pub last_status_change: Instant,
     pub offline_at: Option<DateTime<Local>>,
+    pub offline_events: Vec<OfflineEvent>,
+    pub consecutive_failures: u32,
+    pub last_failure_time: Option<Instant>,
 }
 
 impl From<&DeviceInfo> for DeviceUIInfo {
@@ -47,18 +58,28 @@ impl From<&DeviceInfo> for DeviceUIInfo {
             last_seen: info.last_seen,
             last_status_change: Instant::now(),
             offline_at: None,
+            offline_events: Vec::new(),
+            consecutive_failures: 0,
+            last_failure_time: None,
         }
     }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum UIViewMode {
+    List,    // 设备列表视图
+    Detail,  // 设备详情视图
 }
 
 #[derive(Clone)]
 pub struct CharacterUI {
     devices: Arc<Mutex<HashMap<IpAddr, DeviceUIInfo>>>,
     running: Arc<Mutex<bool>>,
-    show_details: bool,
     sort_by_ip: bool,
     highlight_index: usize,
     scroll_offset: usize,
+    view_mode: UIViewMode,
+    detail_scroll_offset: usize,
 }
 
 impl CharacterUI {
@@ -66,10 +87,11 @@ impl CharacterUI {
         Self {
             devices: Arc::new(Mutex::new(HashMap::new())),
             running,
-            show_details: true,
             sort_by_ip: false,
             highlight_index: 0,
             scroll_offset: 0,
+            view_mode: UIViewMode::List,
+            detail_scroll_offset: 0,
         }
     }
 
@@ -106,6 +128,47 @@ impl CharacterUI {
         }
     }
 
+    pub fn update_device_status(&mut self, ip: &IpAddr, ping_success: bool) {
+        const UNSTABLE_THRESHOLD: u32 = 2;
+        const OFFLINE_THRESHOLD: u32 = 5;
+
+        let mut devices = self.devices.lock().unwrap();
+        if let Some(device) = devices.get_mut(ip) {
+            if ping_success {
+                // 恢复在线
+                if device.consecutive_failures > 0 {
+                    if let Some(last_event) = device.offline_events.last_mut() {
+                        if last_event.online_at.is_none() {
+                            last_event.online_at = Some(Local::now());
+                            last_event.duration_ms = last_event
+                                .online_at
+                                .unwrap()
+                                .signed_duration_since(last_event.offline_at)
+                                .num_milliseconds() as u64;
+                        }
+                    }
+                }
+                device.consecutive_failures = 0;
+                device.status = DeviceUIStatus::Online;
+                device.last_failure_time = None;
+            } else {
+                device.consecutive_failures += 1;
+                device.last_failure_time = Some(Instant::now());
+
+                if device.consecutive_failures == UNSTABLE_THRESHOLD {
+                    device.status = DeviceUIStatus::Unstable;
+                    device.offline_events.push(OfflineEvent {
+                        offline_at: Local::now(),
+                        online_at: None,
+                        duration_ms: 0,
+                    });
+                } else if device.consecutive_failures >= OFFLINE_THRESHOLD {
+                    device.status = DeviceUIStatus::Offline;
+                }
+            }
+        }
+    }
+
     pub fn mark_device_lost(&mut self, ip: &IpAddr) {
         let mut devices = self.devices.lock().unwrap();
         if let Some(device) = devices.get_mut(ip) {
@@ -128,19 +191,56 @@ impl CharacterUI {
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(KeyEvent { code, .. }) = event::read()? {
                     match code {
-                        KeyCode::Char('q') | KeyCode::Esc => *self.running.lock().unwrap() = false,
-                        KeyCode::Char('d') => {
-                            self.show_details = !self.show_details;
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            if self.view_mode == UIViewMode::Detail {
+                                self.view_mode = UIViewMode::List;
+                                self.detail_scroll_offset = 0;
+                            } else {
+                                *self.running.lock().unwrap() = false;
+                            }
+                            self.render(&mut stdout)?;
+                        }
+                        KeyCode::Char('e') => {
+                            if self.view_mode == UIViewMode::List {
+                                self.view_mode = UIViewMode::Detail;
+                                self.detail_scroll_offset = 0;
+                            }
                             self.render(&mut stdout)?;
                         }
                         KeyCode::Char('s') => {
-                            self.sort_by_ip = !self.sort_by_ip;
+                            if self.view_mode == UIViewMode::List {
+                                self.sort_by_ip = !self.sort_by_ip;
+                            }
                             self.render(&mut stdout)?;
                         }
-                        KeyCode::Up => self.handle_up_key(),
-                        KeyCode::Down => self.handle_down_key()?,
-                        KeyCode::PageUp => self.handle_page_up()?,
-                        KeyCode::PageDown => self.handle_page_down()?,
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if self.view_mode == UIViewMode::List {
+                                self.handle_up_key();
+                            } else if self.detail_scroll_offset > 0 {
+                                self.detail_scroll_offset -= 1;
+                            }
+                            self.render(&mut stdout)?;
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if self.view_mode == UIViewMode::List {
+                                self.handle_down_key()?;
+                            } else {
+                                self.detail_scroll_offset += 1;
+                            }
+                            self.render(&mut stdout)?;
+                        }
+                        KeyCode::PageUp => {
+                            if self.view_mode == UIViewMode::List {
+                                self.handle_page_up()?;
+                            }
+                            self.render(&mut stdout)?;
+                        }
+                        KeyCode::PageDown => {
+                            if self.view_mode == UIViewMode::List {
+                                self.handle_page_down()?;
+                            }
+                            self.render(&mut stdout)?;
+                        }
                         _ => {}
                     }
                 }
@@ -212,6 +312,13 @@ impl CharacterUI {
     }
 
     fn render(&self, stdout: &mut io::Stdout) -> io::Result<()> {
+        match self.view_mode {
+            UIViewMode::List => self.render_list_view(stdout),
+            UIViewMode::Detail => self.render_detail_view(stdout),
+        }
+    }
+
+    fn render_list_view(&self, stdout: &mut io::Stdout) -> io::Result<()> {
         execute!(
             stdout,
             terminal::Clear(ClearType::All),
@@ -254,6 +361,205 @@ impl CharacterUI {
         stdout.flush()
     }
 
+    fn render_detail_view(&self, stdout: &mut io::Stdout) -> io::Result<()> {
+        execute!(
+            stdout,
+            terminal::Clear(ClearType::All),
+            cursor::MoveTo(0, 0)
+        )?;
+
+        let (width, height) = terminal::size()?;
+        let devices = self.get_sorted_devices();
+
+        if devices.is_empty() {
+            execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                style::Print("没有设备")
+            )?;
+            return stdout.flush();
+        }
+
+        if self.highlight_index >= devices.len() {
+            return stdout.flush();
+        }
+
+        let device = &devices[self.highlight_index];
+        self.render_device_detail(stdout, device, width, height)?;
+        stdout.flush()
+    }
+
+    fn render_device_detail(&self, stdout: &mut io::Stdout, device: &DeviceUIInfo, width: u16, height: u16) -> io::Result<()> {
+        let status_str = match device.status {
+            DeviceUIStatus::Online => "Online",
+            DeviceUIStatus::Offline => "Offline",
+            DeviceUIStatus::Unstable => "Unstable",
+            DeviceUIStatus::New => "New",
+            DeviceUIStatus::Lost => "Lost",
+        };
+
+        // 标题
+        execute!(
+            stdout,
+            cursor::MoveTo(0, 0),
+            style::PrintStyledContent(
+                format!("┌─ {} 详情 ", device.ip)
+                    .bold()
+                    .with(Color::Cyan)
+            ),
+            style::Print("─".repeat((width as usize).saturating_sub(format!("┌─ {} 详情 ", device.ip).len() + 1))),
+            style::Print("┐"),
+        )?;
+
+        let mut y = 1;
+
+        // MAC 地址
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ MAC: "),
+            style::PrintStyledContent(
+                device.mac.as_deref().unwrap_or("-").to_string().green()
+            ),
+            style::Print(" ".repeat((width as usize).saturating_sub(8 + device.mac.as_deref().unwrap_or("-").len() + 1))),
+            style::Print("│"),
+        )?;
+        y += 1;
+
+        // 厂商
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ 厂商: "),
+            style::PrintStyledContent(
+                device.vendor.as_deref().unwrap_or("-").to_string().yellow()
+            ),
+            style::Print(" ".repeat((width as usize).saturating_sub(8 + device.vendor.as_deref().unwrap_or("-").len() + 1))),
+            style::Print("│"),
+        )?;
+        y += 1;
+
+        // 主机名
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ Hostname: "),
+            style::PrintStyledContent(
+                device.hostname.as_deref().unwrap_or("-").to_string().blue()
+            ),
+            style::Print(" ".repeat((width as usize).saturating_sub(12 + device.hostname.as_deref().unwrap_or("-").len() + 1))),
+            style::Print("│"),
+        )?;
+        y += 1;
+
+        // 状态
+        let (status_color, status_display) = match device.status {
+            DeviceUIStatus::Online => (Color::Green, "Online"),
+            DeviceUIStatus::Offline => (Color::Red, "Offline"),
+            DeviceUIStatus::Unstable => (Color::Yellow, "Unstable"),
+            DeviceUIStatus::New => (Color::Yellow, "New"),
+            DeviceUIStatus::Lost => (Color::Red, "Lost"),
+        };
+
+        let status_line = format!("│ 状态: {} (连续失败 {} 次)", status_display, device.consecutive_failures);
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print(&status_line),
+            style::Print(" ".repeat((width as usize).saturating_sub(status_line.len() + 1))),
+            style::Print("│"),
+        )?;
+        y += 2;
+
+        // 离线事件历史标题
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ 离线事件历史:"),
+            style::Print(" ".repeat((width as usize).saturating_sub(16))),
+            style::Print("│"),
+        )?;
+        y += 1;
+
+        // 离线事件列表
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ ┌"),
+            style::Print("─".repeat((width as usize).saturating_sub(4))),
+            style::Print("┐ │"),
+        )?;
+        y += 1;
+
+        let max_events = (height as usize).saturating_sub(y as usize + 5);
+        for (idx, event) in device.offline_events.iter().enumerate().skip(self.detail_scroll_offset).take(max_events) {
+            let offline_time = event.offline_at.format("%H:%M:%S").to_string();
+            let online_time = event.online_at.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "(进行中)".to_string());
+            let duration_str = if event.duration_ms > 0 {
+                format!("{}s", event.duration_ms / 1000)
+            } else {
+                format!("{}ms", event.duration_ms)
+            };
+            let status_icon = if event.online_at.is_some() { "恢复 ✓" } else { "离线中 ⏱️" };
+
+            let event_line = format!("│ │ #{} | {} - {} | {:<5} | {}", 
+                idx + 1, offline_time, online_time, duration_str, status_icon);
+            
+            execute!(
+                stdout,
+                cursor::MoveTo(0, y),
+                style::Print(&event_line),
+                style::Print(" ".repeat((width as usize).saturating_sub(event_line.len() + 1))),
+                style::Print("│"),
+            )?;
+            y += 1;
+        }
+
+        // 关闭事件列表框
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("│ └"),
+            style::Print("─".repeat((width as usize).saturating_sub(4))),
+            style::Print("┘ │"),
+        )?;
+        y += 2;
+
+        // 统计信息
+        let total_offline = device.offline_events.len();
+        let total_duration: u64 = device.offline_events.iter().map(|e| e.duration_ms).sum();
+        let avg_duration = if total_offline > 0 { total_duration / total_offline as u64 } else { 0 };
+
+        let stats_line = format!("│ 统计: 共 {} 次离线，平均时长 {:.1}s", total_offline, avg_duration as f64 / 1000.0);
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print(&stats_line),
+            style::Print(" ".repeat((width as usize).saturating_sub(stats_line.len() + 1))),
+            style::Print("│"),
+        )?;
+        y += 1;
+
+        // 底部边框
+        execute!(
+            stdout,
+            cursor::MoveTo(0, y),
+            style::Print("└"),
+            style::Print("─".repeat((width as usize).saturating_sub(2))),
+            style::Print("┘"),
+        )?;
+
+        // 帮助信息
+        let help = "按键: [q/ESC]返回列表 [↑/↓/j/k]滚动";
+        execute!(
+            stdout,
+            cursor::MoveTo(0, height - 1),
+            style::Print(help),
+        )?;
+
+        Ok(())
+    }
+
     fn render_title(&self, stdout: &mut io::Stdout, width: u16) -> io::Result<()> {
         let title = " PingUltra Network Monitor ";
         let title_len = title.len() as u16;
@@ -286,24 +592,20 @@ impl CharacterUI {
         let mac_width: usize = 13;
         let hostname_width: usize = 18;
         let vendor_width: usize = 13;
-        let header = if self.show_details {
-            format!(
-                "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$} {}",
-                "IP",
-                "存活时间",
-                "MAC",
-                "Hostname",
-                "Vendor",
-                "Status",
-                ip_w = ip_width,
-                alive_w = alive_width,
-                mac_w = mac_width,
-                host_w = hostname_width,
-                vendor_w = vendor_width
-            )
-        } else {
-            format!("{:<ip_w$} {}", "IP", "Status", ip_w = ip_width)
-        };
+        let header = format!(
+            "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$} {}",
+            "IP",
+            "存活时间",
+            "MAC",
+            "Hostname",
+            "Vendor",
+            "Status",
+            ip_w = ip_width,
+            alive_w = alive_width,
+            mac_w = mac_width,
+            host_w = hostname_width,
+            vendor_w = vendor_width
+        );
 
         execute!(
             stdout,
@@ -333,6 +635,7 @@ impl CharacterUI {
         let (status_str, status_style) = match device.status {
             DeviceUIStatus::Online => (" Online ", Color::Green),
             DeviceUIStatus::Offline => (" Offline ", Color::Red),
+            DeviceUIStatus::Unstable => (" Unstable ", Color::Yellow),
             DeviceUIStatus::New => (" New ", Color::Yellow),
             DeviceUIStatus::Lost => (" Lost ", Color::Red),
         };
@@ -368,27 +671,19 @@ impl CharacterUI {
         let seconds = duration.num_seconds() % 60;
         let alive_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
-        let row_content = if self.show_details {
-            format!(
-                "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$}",
-                device.ip.to_string(),
-                alive_str,
-                mac,
-                hostname,
-                vendor,
-                ip_w = ip_width,
-                alive_w = alive_width,
-                mac_w = mac_width,
-                host_w = hostname_width,
-                vendor_w = vendor_width
-            )
-        } else {
-            format!(
-                "{:<ip_w$}",
-                device.ip.to_string(),
-                ip_w = ip_width
-            )
-        };
+        let row_content = format!(
+            "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$}",
+            device.ip.to_string(),
+            alive_str,
+            mac,
+            hostname,
+            vendor,
+            ip_w = ip_width,
+            alive_w = alive_width,
+            mac_w = mac_width,
+            host_w = hostname_width,
+            vendor_w = vendor_width
+        );
 
         let y_pos = 4 + row_idx as u16;
 
@@ -443,6 +738,10 @@ impl CharacterUI {
             .iter()
             .filter(|d| d.status == DeviceUIStatus::Offline)
             .count();
+        let unstable = devices
+            .iter()
+            .filter(|d| d.status == DeviceUIStatus::Unstable)
+            .count();
         let new = devices
             .iter()
             .filter(|d| d.status == DeviceUIStatus::New)
@@ -453,15 +752,16 @@ impl CharacterUI {
             .count();
 
         let stats = format!(
-            "设备总数: {} | 在线: {} | 离线: {} | 新设备: {} | 丢失: {}",
+            "设备总数: {} | 在线: {} | 不稳定: {} | 离线: {} | 新设备: {} | 丢失: {}",
             devices.len(),
             online,
+            unstable,
             offline,
             new,
             lost
         );
 
-        let help = "按键: [q]退出 [d]切换详情 [s]切换排序 [↑/↓]导航";
+        let help = "按键: [q]退出 [e]详情 [s]切换排序 [↑/↓/j/k]导航";
 
         execute!(
             stdout,
@@ -483,9 +783,12 @@ impl CharacterUI {
     fn get_sorted_devices(&self) -> Vec<DeviceUIInfo> {
         let devices = self.devices.lock().unwrap();
         let mut online: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Online || d.status == DeviceUIStatus::New).collect();
+        let mut unstable: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Unstable).collect();
         let mut offline: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Offline || d.status == DeviceUIStatus::Lost).collect();
         online.sort_by_key(|d| d.ip);
+        unstable.sort_by_key(|d| d.ip);
         offline.sort_by(|a, b| b.offline_at.cmp(&a.offline_at).then_with(|| a.ip.cmp(&b.ip)));
+        online.extend(unstable);
         online.extend(offline);
         online
     }
