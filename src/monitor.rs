@@ -11,6 +11,7 @@ use std::time::Duration;
 use tokio::task;
 use tokio::time;
 
+use crate::database::Database;
 use crate::error::PingError;
 use crate::host::PingTarget;
 use crate::pinger::Pinger;
@@ -42,6 +43,7 @@ pub struct NetworkMonitor {
     devices: HashMap<IpAddr, DeviceInfo>,
     last_scan: Option<DateTime<Local>>,
     use_ui: bool,
+    db: Option<Database>,
 }
 
 impl NetworkMonitor {
@@ -56,6 +58,20 @@ impl NetworkMonitor {
             PingError::InvalidAddress(format!("Invalid network address: {}", network))
         })?;
 
+        // 初始化数据库（仅在 UI 模式下）
+        let db = if use_ui {
+            let db_path = "pingultra_monitor.db";
+            match Database::new(db_path) {
+                Ok(database) => Some(database),
+                Err(e) => {
+                    eprintln!("Warning: Failed to initialize database: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             network,
             scan_interval: Duration::from_secs(scan_interval_secs),
@@ -64,6 +80,7 @@ impl NetworkMonitor {
             devices: HashMap::new(),
             last_scan: None,
             use_ui,
+            db,
         })
     }
 
@@ -99,7 +116,12 @@ impl NetworkMonitor {
 
         // 如果启用UI，创建UI实例
         let mut ui = if use_ui {
-            Some(CharacterUI::new(running.clone()))
+            let mut ui_instance = CharacterUI::new(running.clone());
+            // 如果有数据库，传递给 UI
+            if let Some(ref db) = self.db {
+                ui_instance = ui_instance.with_database(db.clone());
+            }
+            Some(ui_instance)
         } else {
             None
         };
@@ -147,7 +169,12 @@ impl NetworkMonitor {
                         DeviceStatus::Stable(device) => {
                             // eprintln!("UI mode: Updating stable device {}", device.ip);
                             ui_instance.update_device(device, DeviceUIStatus::Online);
-                            ui_instance.update_device_status(&device.ip, true);
+                            // 获取离线事件信息并保存到数据库
+                            if let Some((offline_at, online_at, duration_ms)) = ui_instance.update_device_status(&device.ip, true) {
+                                if let Some(ref db) = self.db {
+                                    let _ = db.record_offline_event(&device.ip, offline_at, online_at, duration_ms);
+                                }
+                            }
                         }
                     }
                 }

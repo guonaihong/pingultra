@@ -80,6 +80,7 @@ pub struct CharacterUI {
     scroll_offset: usize,
     view_mode: UIViewMode,
     detail_scroll_offset: usize,
+    db: Option<Arc<crate::database::Database>>,
 }
 
 impl CharacterUI {
@@ -92,7 +93,13 @@ impl CharacterUI {
             scroll_offset: 0,
             view_mode: UIViewMode::List,
             detail_scroll_offset: 0,
+            db: None,
         }
+    }
+
+    pub fn with_database(mut self, db: crate::database::Database) -> Self {
+        self.db = Some(Arc::new(db));
+        self
     }
 
     pub fn update_device(&mut self, device: &DeviceInfo, status: DeviceUIStatus) {
@@ -128,7 +135,7 @@ impl CharacterUI {
         }
     }
 
-    pub fn update_device_status(&mut self, ip: &IpAddr, ping_success: bool) {
+    pub fn update_device_status(&mut self, ip: &IpAddr, ping_success: bool) -> Option<(DateTime<Local>, Option<DateTime<Local>>, u64)> {
         const UNSTABLE_THRESHOLD: u32 = 2;
         const OFFLINE_THRESHOLD: u32 = 5;
 
@@ -145,6 +152,13 @@ impl CharacterUI {
                                 .unwrap()
                                 .signed_duration_since(last_event.offline_at)
                                 .num_milliseconds() as u64;
+                            
+                            // 返回离线事件信息供数据库保存
+                            let result = (last_event.offline_at, last_event.online_at, last_event.duration_ms);
+                            device.consecutive_failures = 0;
+                            device.status = DeviceUIStatus::Online;
+                            device.last_failure_time = None;
+                            return Some(result);
                         }
                     }
                 }
@@ -167,6 +181,7 @@ impl CharacterUI {
                 }
             }
         }
+        None
     }
 
     pub fn mark_device_lost(&mut self, ip: &IpAddr) {
@@ -200,7 +215,7 @@ impl CharacterUI {
                             }
                             self.render(&mut stdout)?;
                         }
-                        KeyCode::Char('e') => {
+                        KeyCode::Enter => {
                             if self.view_mode == UIViewMode::List {
                                 self.view_mode = UIViewMode::Detail;
                                 self.detail_scroll_offset = 0;
@@ -492,6 +507,9 @@ impl CharacterUI {
         y += 1;
 
         let max_events = (height as usize).saturating_sub(y as usize + 5);
+        
+        // 首先显示内存中的离线事件
+        let mut event_count = 0;
         for (idx, event) in device.offline_events.iter().enumerate().skip(self.detail_scroll_offset).take(max_events) {
             let offline_time = event.offline_at.format("%H:%M:%S").to_string();
             let online_time = event.online_at.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "(进行中)".to_string());
@@ -513,6 +531,36 @@ impl CharacterUI {
                 style::Print("│"),
             )?;
             y += 1;
+            event_count += 1;
+        }
+        
+        // 如果有数据库，显示历史离线事件
+        if let Some(ref db) = self.db {
+            if let Ok(db_events) = db.get_offline_events(&device.ip) {
+                let remaining_space = max_events.saturating_sub(event_count);
+                for (idx, db_event) in db_events.iter().enumerate().take(remaining_space) {
+                    let offline_time = db_event.offline_at.format("%H:%M:%S").to_string();
+                    let online_time = db_event.online_at.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "(进行中)".to_string());
+                    let duration_str = if db_event.duration_ms > 0 {
+                        format!("{}s", db_event.duration_ms / 1000)
+                    } else {
+                        format!("{}ms", db_event.duration_ms)
+                    };
+                    let status_icon = if db_event.online_at.is_some() { "恢复 ✓" } else { "离线中 ⏱️" };
+
+                    let event_line = format!("│ │ #{} | {} - {} | {:<5} | {}", 
+                        device.offline_events.len() + idx + 1, offline_time, online_time, duration_str, status_icon);
+                    
+                    execute!(
+                        stdout,
+                        cursor::MoveTo(0, y),
+                        style::Print(&event_line),
+                        style::Print(" ".repeat((width as usize).saturating_sub(event_line.len() + 1))),
+                        style::Print("│"),
+                    )?;
+                    y += 1;
+                }
+            }
         }
 
         // 关闭事件列表框
@@ -761,7 +809,7 @@ impl CharacterUI {
             lost
         );
 
-        let help = "按键: [q]退出 [e]详情 [s]切换排序 [↑/↓/j/k]导航";
+        let help = "按键: [q]退出 [Enter]详情 [s]切换排序 [↑/↓/j/k]导航";
 
         execute!(
             stdout,
