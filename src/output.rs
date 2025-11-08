@@ -26,7 +26,7 @@ pub fn print_ping_result(response: &PingResponse, show_timestamp: bool) {
     } else {
         String::new()
     };
-    
+
     match &response.error {
         None => {
             let rtt = response.rtt.unwrap();
@@ -39,7 +39,7 @@ pub fn print_ping_result(response: &PingResponse, show_timestamp: bool) {
                 response.ttl,
                 format_duration(rtt).green()
             );
-        },
+        }
         Some(crate::error::PingError::Timeout) => {
             println!(
                 "{}Request timeout for icmp_seq={} ({})",
@@ -47,7 +47,7 @@ pub fn print_ping_result(response: &PingResponse, show_timestamp: bool) {
                 response.seq,
                 response.target.addr.to_string().red()
             );
-        },
+        }
         Some(e) => {
             println!(
                 "{}Error pinging {} (seq={}): {}",
@@ -62,14 +62,20 @@ pub fn print_ping_result(response: &PingResponse, show_timestamp: bool) {
 
 pub fn print_ping_summary(host: &str, stats: &PingStats) {
     println!("\n--- {} ping statistics ---", host);
-    println!("{} packets transmitted, {} received, {:.1}% packet loss", 
-             stats.sent, stats.received, stats.loss_percent());
-    
+    println!(
+        "{} packets transmitted, {} received, {:.1}% packet loss",
+        stats.sent,
+        stats.received,
+        stats.loss_percent()
+    );
+
     if stats.received > 0 {
-        println!("rtt min/avg/max = {}/{}/{}", 
-                 format_duration(stats.min_rtt.unwrap()),
-                 format_duration(stats.avg_rtt().unwrap()),
-                 format_duration(stats.max_rtt.unwrap()));
+        println!(
+            "rtt min/avg/max = {}/{}/{}",
+            format_duration(stats.min_rtt.unwrap()),
+            format_duration(stats.avg_rtt().unwrap()),
+            format_duration(stats.max_rtt.unwrap())
+        );
     }
 }
 
@@ -77,7 +83,7 @@ pub fn print_json_summary(host: &str, stats: &PingStats) -> String {
     let min = stats.min_rtt.map_or(0.0, |d| d.as_secs_f64() * 1000.0);
     let avg = stats.avg_rtt().map_or(0.0, |d| d.as_secs_f64() * 1000.0);
     let max = stats.max_rtt.map_or(0.0, |d| d.as_secs_f64() * 1000.0);
-    
+
     format!(
         r#"{{
   "host": "{}",
@@ -90,8 +96,13 @@ pub fn print_json_summary(host: &str, stats: &PingStats) -> String {
     "max": {:.3}
   }}
 }}"#,
-        host, stats.sent, stats.received, stats.loss_percent(),
-        min, avg, max
+        host,
+        stats.sent,
+        stats.received,
+        stats.loss_percent(),
+        min,
+        avg,
+        max
     )
 }
 
@@ -99,7 +110,7 @@ pub fn print_csv_summary(host: &str, stats: &PingStats) -> String {
     let min = stats.min_rtt.map_or(0.0, |d| d.as_secs_f64() * 1000.0);
     let avg = stats.avg_rtt().map_or(0.0, |d| d.as_secs_f64() * 1000.0);
     let max = stats.max_rtt.map_or(0.0, |d| d.as_secs_f64() * 1000.0);
-    
+
     format!(
         "host,packets_transmitted,packets_received,packet_loss_percent,rtt_min_ms,rtt_avg_ms,rtt_max_ms\n{},{},{},{:.1},{:.3},{:.3},{:.3}",
         host, stats.sent, stats.received, stats.loss_percent(),

@@ -15,6 +15,25 @@ PingUltra 是一个用 Rust 实现的高性能网络 ping 工具，是 fping 的
 - **交互式字符界面**：提供美观、高效的终端UI，支持设备状态实时显示
 ![PingUltra交互式界面截图](./images/image.png)
 
+## 系统要求
+
+### 支持的平台
+- ✅ Linux
+- ✅ macOS
+- ⚠️ Windows（需要安装 [Npcap](https://npcap.com/) 或 WinPcap，且功能可能受限）
+
+### 依赖
+- **Linux**: 需要安装 `libpcap-dev`
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install libpcap-dev
+  
+  # Fedora/RHEL
+  sudo dnf install libpcap-devel
+  ```
+- **macOS**: 系统自带 libpcap，无需额外安装
+- **Windows**: 需要安装 [Npcap](https://npcap.com/)（推荐）或 WinPcap
+
 ## 安装
 
 ### 使用 cargo install（推荐）

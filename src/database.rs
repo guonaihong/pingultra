@@ -62,12 +62,7 @@ impl Database {
         conn.execute(
             "INSERT INTO offline_events (ip, offline_at, online_at, duration_ms)
              VALUES (?1, ?2, ?3, ?4)",
-            params![
-                ip.to_string(),
-                offline_at,
-                online_at,
-                duration_ms as i64,
-            ],
+            params![ip.to_string(), offline_at, online_at, duration_ms as i64,],
         )?;
         Ok(())
     }
@@ -132,9 +127,7 @@ impl Database {
     #[allow(dead_code)]
     pub fn get_total_offline_count(&self, ip: &IpAddr) -> SqlResult<i64> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT COUNT(*) FROM offline_events WHERE ip = ?1",
-        )?;
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM offline_events WHERE ip = ?1")?;
 
         let count: i64 = stmt.query_row(params![ip.to_string()], |row| row.get(0))?;
         Ok(count)
@@ -144,9 +137,7 @@ impl Database {
     #[allow(dead_code)]
     pub fn get_total_offline_duration(&self, ip: &IpAddr) -> SqlResult<f64> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT SUM(duration_ms) FROM offline_events WHERE ip = ?1",
-        )?;
+        let mut stmt = conn.prepare("SELECT SUM(duration_ms) FROM offline_events WHERE ip = ?1")?;
 
         let total: Option<i64> = stmt.query_row(params![ip.to_string()], |row| row.get(0))?;
         Ok(total.unwrap_or(0) as f64 / 1000.0) // 转换为秒

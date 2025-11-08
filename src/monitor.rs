@@ -170,9 +170,16 @@ impl NetworkMonitor {
                             // eprintln!("UI mode: Updating stable device {}", device.ip);
                             ui_instance.update_device(device, DeviceUIStatus::Online);
                             // 获取离线事件信息并保存到数据库
-                            if let Some((offline_at, online_at, duration_ms)) = ui_instance.update_device_status(&device.ip, true) {
+                            if let Some((offline_at, online_at, duration_ms)) =
+                                ui_instance.update_device_status(&device.ip, true)
+                            {
                                 if let Some(ref db) = self.db {
-                                    let _ = db.record_offline_event(&device.ip, offline_at, online_at, duration_ms);
+                                    let _ = db.record_offline_event(
+                                        &device.ip,
+                                        offline_at,
+                                        online_at,
+                                        duration_ms,
+                                    );
                                 }
                             }
                         }
@@ -766,7 +773,11 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
-                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                    &device
+                        .offline_at
+                        .as_ref()
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
@@ -781,7 +792,11 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
-                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                    &device
+                        .offline_at
+                        .as_ref()
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
@@ -796,7 +811,11 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                     &device.vendor.clone().unwrap_or_default(),
                     &device.first_seen.to_rfc3339(),
                     &device.last_seen.to_rfc3339(),
-                    &device.offline_at.as_ref().map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                    &device
+                        .offline_at
+                        .as_ref()
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_default(),
                 ]) {
                     Ok(_) => (),
                     Err(e) => return Err(e),
