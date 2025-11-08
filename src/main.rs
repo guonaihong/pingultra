@@ -192,33 +192,31 @@ async fn main() -> Result<()> {
 
     // Print summary for each host
     if let Some(command) = &cli.command {
-        match command {
-            cli::Commands::Summary { format } => {
-                match format.as_str() {
-                    "json" => {
-                        for (host, stats) in &host_stats {
-                            println!("{}", print_json_summary(host, stats));
-                        }
+        // 其他命令已经在前面处理过了
+        if let cli::Commands::Summary { format } = command {
+            match format.as_str() {
+                "json" => {
+                    for (host, stats) in &host_stats {
+                        println!("{}", print_json_summary(host, stats));
                     }
-                    "csv" => {
-                        // Print header only once
-                        println!("host,packets_transmitted,packets_received,packet_loss_percent,rtt_min_ms,rtt_avg_ms,rtt_max_ms");
-                        for (host, stats) in &host_stats {
-                            let csv = print_csv_summary(host, stats);
-                            // Skip the header line
-                            if let Some(pos) = csv.find('\n') {
-                                println!("{}", &csv[pos + 1..]);
-                            }
-                        }
-                    }
-                    _ => {
-                        for (host, stats) in &host_stats {
-                            print_ping_summary(host, stats);
+                }
+                "csv" => {
+                    // Print header only once
+                    println!("host,packets_transmitted,packets_received,packet_loss_percent,rtt_min_ms,rtt_avg_ms,rtt_max_ms");
+                    for (host, stats) in &host_stats {
+                        let csv = print_csv_summary(host, stats);
+                        // Skip the header line
+                        if let Some(pos) = csv.find('\n') {
+                            println!("{}", &csv[pos + 1..]);
                         }
                     }
                 }
+                _ => {
+                    for (host, stats) in &host_stats {
+                        print_ping_summary(host, stats);
+                    }
+                }
             }
-            _ => {} // 其他命令已经在前面处理过了
         }
     } else {
         for (host, stats) in &host_stats {

@@ -835,9 +835,9 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                 "Invalid UTF-8 sequence",
             ))),
         },
-        Err(e) => Err(csv::Error::from(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to get inner writer: {}", e),
-        ))),
+        Err(e) => Err(csv::Error::from(std::io::Error::other(format!(
+            "Failed to get inner writer: {}",
+            e
+        )))),
     }
 }
