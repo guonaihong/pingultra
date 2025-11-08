@@ -90,14 +90,22 @@ jobs:
     - name: Install cross-compilation tools (Linux ARM64)
       if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
-        sudo apt-get install -y gcc-aarch64-linux-gnu
+        sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
         echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
     
     - name: Build
       run: cargo build --release --target ${{ matrix.target }}
     
-    - name: Strip binary (Linux and macOS)
-      if: runner.os != 'Windows'
+    - name: Strip binary (Linux x86_64)
+      if: matrix.target == 'x86_64-unknown-linux-gnu'
+      run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+    
+    - name: Strip binary (Linux ARM64)
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+    
+    - name: Strip binary (macOS)
+      if: runner.os == 'macOS'
       run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
     
     - name: Create archive (Linux and macOS)
