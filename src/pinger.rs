@@ -9,6 +9,12 @@ use tokio::sync::mpsc;
 use tokio::time;
 use std::mem::MaybeUninit;
 
+// SOCK_RAW constant for raw sockets
+#[cfg(unix)]
+const SOCK_RAW: i32 = 3;
+#[cfg(windows)]
+const SOCK_RAW: i32 = 3;
+
 use crate::error::PingError;
 use crate::host::{PingResponse, PingTarget};
 use crate::icmp::{IcmpEchoRequest, parse_echo_reply};
@@ -45,7 +51,7 @@ impl Pinger {
         
         let socket = match target.addr {
             IpAddr::V4(_) => {
-                let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::ICMPV4))
+                let socket = Socket::new(Domain::IPV4, Type::from(SOCK_RAW), Some(Protocol::ICMPV4))
                     .map_err(|e| {
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
                             PingError::PermissionDenied
@@ -57,7 +63,7 @@ impl Pinger {
                 socket
             },
             IpAddr::V6(_) => {
-                let socket = Socket::new(Domain::IPV6, Type::RAW, Some(Protocol::ICMPV6))
+                let socket = Socket::new(Domain::IPV6, Type::from(SOCK_RAW), Some(Protocol::ICMPV6))
                     .map_err(|e| {
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
                             PingError::PermissionDenied
