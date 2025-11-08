@@ -10,32 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    
-    steps:
-    - name: Get version from tag
-      id: get_version
-      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-    
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: Release ${{ steps.get_version.outputs.version }}
-        draft: false
-        prerelease: false
-
   build-release:
     name: Build Release
-    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -120,24 +96,22 @@ jobs:
         7z a ${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
         mv ${{ matrix.asset_name }}.zip ../../..
     
-    - name: Upload Release Asset (Linux and macOS)
+    - name: Upload Release Assets (Linux and macOS)
       if: runner.os != 'Windows'
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ matrix.asset_name }}.tar.gz
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.asset_name }}.tar.gz
-        asset_name: ${{ matrix.asset_name }}.tar.gz
-        asset_content_type: application/gzip
     
-    - name: Upload Release Asset (Windows)
+    - name: Upload Release Assets (Windows)
       if: runner.os == 'Windows'
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ matrix.asset_name }}.zip
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.asset_name }}.zip
-        asset_name: ${{ matrix.asset_name }}.zip
-        asset_content_type: application/zip
