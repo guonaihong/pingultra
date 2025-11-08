@@ -124,6 +124,7 @@ impl CharacterUI {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_device_offline(&mut self, ip: &IpAddr) {
         let mut devices = self.devices.lock().unwrap();
         if let Some(device) = devices.get_mut(ip) {
@@ -184,6 +185,7 @@ impl CharacterUI {
         None
     }
 
+    #[allow(dead_code)]
     pub fn mark_device_lost(&mut self, ip: &IpAddr) {
         let mut devices = self.devices.lock().unwrap();
         if let Some(device) = devices.get_mut(ip) {
@@ -348,7 +350,7 @@ impl CharacterUI {
 
         let devices = self.get_sorted_devices();
         let device_count = devices.len();
-        let (start_idx, end_idx, highlight_index, scroll_offset) = Self::calculate_visible_range_and_highlight(
+        let (start_idx, end_idx, highlight_index, _scroll_offset) = Self::calculate_visible_range_and_highlight(
             device_count,
             visible_rows,
             self.highlight_index,
@@ -362,10 +364,6 @@ impl CharacterUI {
                 stdout,
                 device,
                 absolute_idx == highlight_index,
-                16,
-                13,
-                18,
-                13,
                 width,
                 idx,
             )?;
@@ -405,7 +403,7 @@ impl CharacterUI {
     }
 
     fn render_device_detail(&self, stdout: &mut io::Stdout, device: &DeviceUIInfo, width: u16, height: u16) -> io::Result<()> {
-        let status_str = match device.status {
+        let _status_str = match device.status {
             DeviceUIStatus::Online => "Online",
             DeviceUIStatus::Offline => "Offline",
             DeviceUIStatus::Unstable => "Unstable",
@@ -468,7 +466,7 @@ impl CharacterUI {
         y += 1;
 
         // 状态
-        let (status_color, status_display) = match device.status {
+        let (_status_color, status_display) = match device.status {
             DeviceUIStatus::Online => (Color::Green, "Online"),
             DeviceUIStatus::Offline => (Color::Red, "Offline"),
             DeviceUIStatus::Unstable => (Color::Yellow, "Unstable"),
@@ -630,10 +628,10 @@ impl CharacterUI {
     fn render_table_header(
         &self,
         stdout: &mut io::Stdout,
-        ip_width: usize,
-        mac_width: usize,
-        hostname_width: usize,
-        vendor_width: usize,
+        _ip_width: usize,
+        _mac_width: usize,
+        _hostname_width: usize,
+        _vendor_width: usize,
     ) -> io::Result<()> {
         let ip_width: usize = 16;
         let alive_width: usize = 12;
@@ -668,10 +666,6 @@ impl CharacterUI {
         stdout: &mut io::Stdout,
         device: &DeviceUIInfo,
         is_highlighted: bool,
-        _ip_width: usize,
-        _mac_width: usize,
-        _hostname_width: usize,
-        _vendor_width: usize,
         terminal_width: u16,
         row_idx: usize,
     ) -> io::Result<()> {
@@ -758,7 +752,7 @@ impl CharacterUI {
         stdout: &mut io::Stdout,
         rendered: usize,
         visible_rows: usize,
-        width: u16,
+        _width: u16,
     ) -> io::Result<()> {
         let remaining = visible_rows.saturating_sub(rendered);
         for i in 0..remaining {
@@ -775,7 +769,7 @@ impl CharacterUI {
         &self,
         stdout: &mut io::Stdout,
         devices: &[DeviceUIInfo],
-        width: u16,
+        _width: u16,
         height: u16,
     ) -> io::Result<()> {
         let online = devices
@@ -813,9 +807,9 @@ impl CharacterUI {
 
         execute!(
             stdout,
-            cursor::MoveTo(0, (height - 2) as u16),
+            cursor::MoveTo(0, height - 2),
             style::Print(&stats),
-            cursor::MoveTo(0, (height - 1) as u16),
+            cursor::MoveTo(0, height - 1),
             style::Print(help),
         )
     }
@@ -830,9 +824,9 @@ impl CharacterUI {
 
     fn get_sorted_devices(&self) -> Vec<DeviceUIInfo> {
         let devices = self.devices.lock().unwrap();
-        let mut online: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Online || d.status == DeviceUIStatus::New).collect();
-        let mut unstable: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Unstable).collect();
-        let mut offline: Vec<DeviceUIInfo> = devices.values().cloned().filter(|d| d.status == DeviceUIStatus::Offline || d.status == DeviceUIStatus::Lost).collect();
+        let mut online: Vec<DeviceUIInfo> = devices.values().filter(|d| d.status == DeviceUIStatus::Online || d.status == DeviceUIStatus::New).cloned().collect();
+        let mut unstable: Vec<DeviceUIInfo> = devices.values().filter(|d| d.status == DeviceUIStatus::Unstable).cloned().collect();
+        let mut offline: Vec<DeviceUIInfo> = devices.values().filter(|d| d.status == DeviceUIStatus::Offline || d.status == DeviceUIStatus::Lost).cloned().collect();
         online.sort_by_key(|d| d.ip);
         unstable.sort_by_key(|d| d.ip);
         offline.sort_by(|a, b| b.offline_at.cmp(&a.offline_at).then_with(|| a.ip.cmp(&b.ip)));
@@ -848,7 +842,7 @@ impl CharacterUI {
         highlight_index: usize,
         scroll_offset: usize,
     ) -> (usize, usize, usize, usize) {
-        let mut hi = highlight_index.min(device_count.saturating_sub(1));
+        let hi = highlight_index.min(device_count.saturating_sub(1));
         let mut so = scroll_offset.min(hi);
         if hi < so {
             so = hi;
@@ -858,6 +852,7 @@ impl CharacterUI {
         (start_idx, end_idx, hi, so)
     }
 
+    #[allow(dead_code)]
     pub fn format_device_info(&self, device: &DeviceUIInfo) -> String {
         let mut parts = Vec::new();
 

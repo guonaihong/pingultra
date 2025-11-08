@@ -7,12 +7,15 @@ use crate::error::PingError;
 
 pub struct IcmpEchoRequest {
     pub identifier: u16,
+    #[allow(dead_code)]
     pub sequence: u16,
     pub payload_size: usize,
 }
 
 pub struct IcmpEchoReply {
+    #[allow(dead_code)]
     pub identifier: u16,
+    #[allow(dead_code)]
     pub sequence: u16,
     pub ttl: u8,
     pub size: usize,

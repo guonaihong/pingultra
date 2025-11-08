@@ -25,4 +25,5 @@ pub enum PingError {
     Other(String),
 }
 
+#[allow(dead_code)]
 pub type PingResult<T> = Result<T, PingError>;

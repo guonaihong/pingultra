@@ -68,7 +68,7 @@ pub fn resolve_host(host: &str) -> Result<IpAddr, PingError> {
         Ok(mut addrs) => {
             // Prefer IPv4 addresses
             for addr in addrs.clone() {
-                if let IpAddr::V4(_) = addr.ip() {
+                if addr.ip().is_ipv4() {
                     return Ok(addr.ip());
                 }
             }

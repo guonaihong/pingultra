@@ -38,11 +38,11 @@ async fn main() -> Result<()> {
     // 处理子命令
     if let Some(command) = &cli.command {
         match command {
-            cli::Commands::Summary { format } => {
+            cli::Commands::Summary { format: _format } => {
                 // 摘要命令需要在收集完统计信息后处理
                 // 所以这里不立即返回
             },
-            cli::Commands::Monitor { network, interval, format, changes_only, resolve_mac, ui } => {
+            cli::Commands::Monitor { network, interval, format: _format, changes_only, resolve_mac, ui } => {
                 // 启动网络监控模式
                 match NetworkMonitor::new(network, *interval, *resolve_mac, *changes_only, *ui) {
                     Ok(mut monitor) => {

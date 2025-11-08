@@ -16,6 +16,7 @@ use crate::icmp::{IcmpEchoRequest, parse_echo_reply};
 /// Pinger结构体，用于发送和接收ICMP包
 pub struct Pinger {
     /// ICMP包的标识符
+    #[allow(dead_code)]
     identifier: u16,
     /// socket对象，用于发送和接收ICMP包
     socket: Socket,
@@ -52,7 +53,7 @@ impl Pinger {
                             PingError::SendError(e)
                         }
                     })?;
-                socket.set_ttl(ttl as u32)?;
+                socket.set_ttl(ttl)?;
                 socket
             },
             IpAddr::V6(_) => {
@@ -64,7 +65,7 @@ impl Pinger {
                             PingError::SendError(e)
                         }
                     })?;
-                socket.set_unicast_hops_v6(ttl as u32)?;
+                socket.set_unicast_hops_v6(ttl)?;
                 socket
             },
         };

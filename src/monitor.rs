@@ -317,76 +317,74 @@ impl NetworkMonitor {
         let ping_results = join_all(ping_tasks).await;
 
         // 处理ping结果
-        for result in ping_results {
-            if let Ok((ip, is_up, _target)) = result {
-                if is_up {
-                    // 只有在非UI模式下才打印主机在线信息
-                    if !self.use_ui {
-                        println!("Host {} is up", ip);
-                    } else {
-                        // eprintln!("UI mode: Host {} is up", ip);
+        for (ip, is_up, _target) in ping_results.into_iter().flatten() {
+            if is_up {
+                // 只有在非UI模式下才打印主机在线信息
+                if !self.use_ui {
+                    println!("Host {} is up", ip);
+                } else {
+                    // eprintln!("UI mode: Host {} is up", ip);
+                }
+
+                // 创建异步任务来获取设备信息
+                let mac_future = if self.resolve_mac {
+                    Some(self.get_mac_address(ip))
+                } else {
+                    None
+                };
+
+                let hostname_future = self.resolve_hostname(ip);
+
+                // 并行获取MAC地址和主机名
+                let (mac, hostname) = match (mac_future, hostname_future) {
+                    (Some(mac_fut), hostname_fut) => {
+                        let (mac_res, hostname_res) = tokio::join!(mac_fut, hostname_fut);
+                        (mac_res, hostname_res)
                     }
-
-                    // 创建异步任务来获取设备信息
-                    let mac_future = if self.resolve_mac {
-                        Some(self.get_mac_address(ip))
-                    } else {
-                        None
-                    };
-
-                    let hostname_future = self.resolve_hostname(ip);
-
-                    // 并行获取MAC地址和主机名
-                    let (mac, hostname) = match (mac_future, hostname_future) {
-                        (Some(mac_fut), hostname_fut) => {
-                            let (mac_res, hostname_res) = tokio::join!(mac_fut, hostname_fut);
-                            (mac_res, hostname_res)
-                        }
-                        (None, hostname_fut) => {
-                            let hostname_res = hostname_fut.await;
-                            (None, hostname_res)
-                        }
-                    };
-
-                    let vendor = if let Some(ref mac_addr) = mac {
-                        self.lookup_vendor(mac_addr)
-                    } else {
-                        None
-                    };
-
-                    let device_info = if let Some(existing) = self.devices.get(&ip) {
-                        // 更新现有设备的最后一次看到的时间
-                        DeviceInfo {
-                            ip,
-                            mac,
-                            hostname,
-                            vendor,
-                            first_seen: existing.first_seen,
-                            last_seen: now,
-                            offline_at: None,
-                        }
-                    } else {
-                        // 新设备
-                        let new_device = DeviceInfo {
-                            ip,
-                            mac,
-                            hostname,
-                            vendor,
-                            first_seen: now,
-                            last_seen: now,
-                            offline_at: None,
-                        };
-
-                        changes.push(DeviceStatus::Added(new_device.clone()));
-                        new_device
-                    };
-
-                    self.devices.insert(ip, device_info.clone());
-                    current_devices.insert(ip);
-
-                    if !self.changes_only {
-                        changes.push(DeviceStatus::Stable(device_info));
+                    (None, hostname_fut) => {
+                        let hostname_res = hostname_fut.await;
+                        (None, hostname_res)
                     }
+                };
+
+                let vendor = if let Some(ref mac_addr) = mac {
+                    self.lookup_vendor(mac_addr)
+                } else {
+                    None
+                };
+
+                let device_info = if let Some(existing) = self.devices.get(&ip) {
+                    // 更新现有设备的最后一次看到的时间
+                    DeviceInfo {
+                        ip,
+                        mac,
+                        hostname,
+                        vendor,
+                        first_seen: existing.first_seen,
+                        last_seen: now,
+                        offline_at: None,
+                    }
+                } else {
+                    // 新设备
+                    let new_device = DeviceInfo {
+                        ip,
+                        mac,
+                        hostname,
+                        vendor,
+                        first_seen: now,
+                        last_seen: now,
+                        offline_at: None,
+                    };
+
+                    changes.push(DeviceStatus::Added(new_device.clone()));
+                    new_device
+                };
+
+                self.devices.insert(ip, device_info.clone());
+                current_devices.insert(ip);
+
+                if !self.changes_only {
+                    changes.push(DeviceStatus::Stable(device_info));
                 }
             }
         }
@@ -537,6 +535,7 @@ impl NetworkMonitor {
     }
 
     // 保留原来的同步方法以兼容其他代码
+    #[allow(dead_code)]
     fn send_offline_notification(&self, device: &DeviceInfo) {
         let title = "设备下线通知";
         let mut message = format!("设备 {} 已下线", device.ip);
@@ -687,6 +686,7 @@ impl NetworkMonitor {
 }
 
 // 导出为JSON格式
+#[allow(dead_code)]
 pub fn export_to_json(devices: &[DeviceStatus]) -> Result<String, serde_json::Error> {
     let json_data = serde_json::json!({
         "timestamp": Local::now().to_rfc3339(),
@@ -736,11 +736,12 @@ pub fn export_to_json(devices: &[DeviceStatus]) -> Result<String, serde_json::Er
 }
 
 // 导出为CSV格式
+#[allow(dead_code)]
 pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
     let mut wtr = csv::Writer::from_writer(vec![]);
 
     // 写入标题行
-    match wtr.write_record(&[
+    match wtr.write_record([
         "status",
         "ip",
         "mac",
@@ -757,7 +758,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
     for status in devices {
         match status {
             DeviceStatus::Added(device) => {
-                match wtr.write_record(&[
+                match wtr.write_record([
                     "added",
                     &device.ip.to_string(),
                     &device.mac.clone().unwrap_or_default(),
@@ -772,7 +773,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                 }
             }
             DeviceStatus::Removed(device) => {
-                match wtr.write_record(&[
+                match wtr.write_record([
                     "removed",
                     &device.ip.to_string(),
                     &device.mac.clone().unwrap_or_default(),
@@ -787,7 +788,7 @@ pub fn export_to_csv(devices: &[DeviceStatus]) -> Result<String, csv::Error> {
                 }
             }
             DeviceStatus::Stable(device) => {
-                match wtr.write_record(&[
+                match wtr.write_record([
                     "stable",
                     &device.ip.to_string(),
                     &device.mac.clone().unwrap_or_default(),

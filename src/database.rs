@@ -2,7 +2,6 @@ use chrono::{DateTime, Local};
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
-use std::path::Path;
 
 /// 离线事件数据库记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +101,7 @@ impl Database {
     }
 
     /// 获取指定 IP 今天的离线次数
+    #[allow(dead_code)]
     pub fn get_today_offline_count(&self, ip: &IpAddr) -> SqlResult<i64> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -115,6 +115,7 @@ impl Database {
     }
 
     /// 获取指定 IP 今天的平均离线时长（秒）
+    #[allow(dead_code)]
     pub fn get_today_avg_offline_duration(&self, ip: &IpAddr) -> SqlResult<f64> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -128,6 +129,7 @@ impl Database {
     }
 
     /// 获取指定 IP 的总离线次数
+    #[allow(dead_code)]
     pub fn get_total_offline_count(&self, ip: &IpAddr) -> SqlResult<i64> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -139,6 +141,7 @@ impl Database {
     }
 
     /// 获取指定 IP 的总离线时长（秒）
+    #[allow(dead_code)]
     pub fn get_total_offline_duration(&self, ip: &IpAddr) -> SqlResult<f64> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -150,6 +153,7 @@ impl Database {
     }
 
     /// 获取所有设备的离线统计
+    #[allow(dead_code)]
     pub fn get_all_devices_stats(&self) -> SqlResult<Vec<(String, i64, f64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -176,6 +180,7 @@ impl Database {
     }
 
     /// 清理旧数据（保留最近 30 天）
+    #[allow(dead_code)]
     pub fn cleanup_old_data(&self) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -187,6 +192,7 @@ impl Database {
     }
 
     /// 导出数据为 JSON
+    #[allow(dead_code)]
     pub fn export_to_json(&self, ip: &IpAddr) -> SqlResult<String> {
         let events = self.get_offline_events(ip)?;
         let json = serde_json::to_string_pretty(&events).unwrap_or_default();
@@ -200,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_database_creation() {
-        let db = Database::new(":memory:").unwrap();
+        let _db = Database::new(":memory:").unwrap();
         // 测试通过即可
     }
 }
