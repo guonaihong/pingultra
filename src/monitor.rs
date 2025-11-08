@@ -580,7 +580,10 @@ impl NetworkMonitor {
         #[cfg(target_os = "linux")]
         {
             // 在 Linux 上使用 notify-send 发送通知
-            let _ = Command::new("notify-send").arg(title).arg(&message).output();
+            let _ = Command::new("notify-send")
+                .arg(title)
+                .arg(&message)
+                .output();
         }
 
         #[cfg(target_os = "windows")]
