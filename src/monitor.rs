@@ -504,7 +504,7 @@ impl NetworkMonitor {
                 .arg("-e")
                 .arg(format!(
                     "display notification \"{}\" with title \"{}\"",
-                    message, title
+                    &message, title
                 ))
                 .output()
                 .await;
@@ -515,7 +515,7 @@ impl NetworkMonitor {
             // 在 Linux 上使用 notify-send 发送通知
             let _ = tokio::process::Command::new("notify-send")
                 .arg(title)
-                .arg(message)
+                .arg(&message)
                 .output()
                 .await;
         }
@@ -525,7 +525,7 @@ impl NetworkMonitor {
             // 在 Windows 上，可以使用 PowerShell 发送通知
             let ps_script = format!(
                 "Add-Type -AssemblyName System.Windows.Forms; $notify = New-Object System.Windows.Forms.NotifyIcon; $notify.Icon = [System.Drawing.SystemIcons]::Information; $notify.Visible = $true; $notify.ShowBalloonTip(0, '{}', '{}', [System.Windows.Forms.ToolTipIcon]::None)",
-                title, message
+                title, &message
             );
 
             let _ = tokio::process::Command::new("powershell")
@@ -572,7 +572,7 @@ impl NetworkMonitor {
                 .arg("-e")
                 .arg(format!(
                     "display notification \"{}\" with title \"{}\"",
-                    message, title
+                    &message, title
                 ))
                 .output();
         }
@@ -580,7 +580,7 @@ impl NetworkMonitor {
         #[cfg(target_os = "linux")]
         {
             // 在 Linux 上使用 notify-send 发送通知
-            let _ = Command::new("notify-send").arg(title).arg(message).output();
+            let _ = Command::new("notify-send").arg(title).arg(&message).output();
         }
 
         #[cfg(target_os = "windows")]
@@ -588,7 +588,7 @@ impl NetworkMonitor {
             // 在 Windows 上，可以使用 PowerShell 发送通知
             let ps_script = format!(
                 "Add-Type -AssemblyName System.Windows.Forms; $notify = New-Object System.Windows.Forms.NotifyIcon; $notify.Icon = [System.Drawing.SystemIcons]::Information; $notify.Visible = $true; $notify.ShowBalloonTip(0, '{}', '{}', [System.Windows.Forms.ToolTipIcon]::None)",
-                title, message
+                title, &message
             );
 
             let _ = Command::new("powershell")
