@@ -1,5 +1,8 @@
 # PingUltra
 
+[![CI](https://github.com/guonaihong/pingultra/actions/workflows/ci.yml/badge.svg)](https://github.com/guonaihong/pingultra/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 PingUltra 是一个用 Rust 实现的高性能网络 ping 工具，是 fping 的兼容升级版本。它支持并行 ping 多个主机，提供丰富的统计信息和多种输出格式。
 
 ## 特性
