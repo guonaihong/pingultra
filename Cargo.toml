@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 authors = ["pingultra developers"]
 description = "A fast ping utility implemented in Rust"
+license = "MIT"
+repository = "https://github.com/guonaihong/pingultra"
+homepage = "https://github.com/guonaihong/pingultra"
+documentation = "https://github.com/guonaihong/pingultra"
+keywords = ["ping", "network", "icmp", "monitoring", "fping"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
