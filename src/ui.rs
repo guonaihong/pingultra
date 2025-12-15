@@ -6,6 +6,7 @@ use crossterm::{
     style::{self, Color, Stylize},
     terminal::{self, ClearType},
 };
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::net::IpAddr;
@@ -21,6 +22,12 @@ pub enum DeviceUIStatus {
     Unstable,
     New,
     Lost,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    Ip,
+    AliveDuration,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +72,14 @@ impl From<&DeviceInfo> for DeviceUIInfo {
     }
 }
 
+fn status_rank(status: &DeviceUIStatus) -> u8 {
+    match status {
+        DeviceUIStatus::Online | DeviceUIStatus::New => 0,
+        DeviceUIStatus::Unstable => 1,
+        DeviceUIStatus::Offline | DeviceUIStatus::Lost => 2,
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum UIViewMode {
     List,   // 设备列表视图
@@ -75,7 +90,7 @@ pub enum UIViewMode {
 pub struct CharacterUI {
     devices: Arc<Mutex<HashMap<IpAddr, DeviceUIInfo>>>,
     running: Arc<Mutex<bool>>,
-    sort_by_ip: bool,
+    sort_mode: SortMode,
     highlight_index: usize,
     scroll_offset: usize,
     view_mode: UIViewMode,
@@ -88,7 +103,7 @@ impl CharacterUI {
         Self {
             devices: Arc::new(Mutex::new(HashMap::new())),
             running,
-            sort_by_ip: false,
+            sort_mode: SortMode::Ip,
             highlight_index: 0,
             scroll_offset: 0,
             view_mode: UIViewMode::List,
@@ -235,7 +250,10 @@ impl CharacterUI {
                         }
                         KeyCode::Char('s') => {
                             if self.view_mode == UIViewMode::List {
-                                self.sort_by_ip = !self.sort_by_ip;
+                                self.sort_mode = match self.sort_mode {
+                                    SortMode::Ip => SortMode::AliveDuration,
+                                    SortMode::AliveDuration => SortMode::Ip,
+                                };
                             }
                             self.render(&mut stdout)?;
                         }
@@ -689,10 +707,14 @@ impl CharacterUI {
         let mac_width: usize = 13;
         let hostname_width: usize = 18;
         let vendor_width: usize = 13;
+        let (ip_label, alive_label) = match self.sort_mode {
+            SortMode::Ip => ("IP*", "存活时间"),
+            SortMode::AliveDuration => ("IP", "存活时间*"),
+        };
         let header = format!(
             "{:<ip_w$} {:<alive_w$} {:<mac_w$} {:<host_w$} {:<vendor_w$} {}",
-            "IP",
-            "存活时间",
+            ip_label,
+            alive_label,
             "MAC",
             "Hostname",
             "Vendor",
@@ -879,31 +901,34 @@ impl CharacterUI {
 
     fn get_sorted_devices(&self) -> Vec<DeviceUIInfo> {
         let devices = self.devices.lock().unwrap();
-        let mut online: Vec<DeviceUIInfo> = devices
-            .values()
-            .filter(|d| d.status == DeviceUIStatus::Online || d.status == DeviceUIStatus::New)
-            .cloned()
-            .collect();
-        let mut unstable: Vec<DeviceUIInfo> = devices
-            .values()
-            .filter(|d| d.status == DeviceUIStatus::Unstable)
-            .cloned()
-            .collect();
-        let mut offline: Vec<DeviceUIInfo> = devices
-            .values()
-            .filter(|d| d.status == DeviceUIStatus::Offline || d.status == DeviceUIStatus::Lost)
-            .cloned()
-            .collect();
-        online.sort_by_key(|d| d.ip);
-        unstable.sort_by_key(|d| d.ip);
-        offline.sort_by(|a, b| {
-            b.offline_at
-                .cmp(&a.offline_at)
-                .then_with(|| a.ip.cmp(&b.ip))
+        let mut devices: Vec<DeviceUIInfo> = devices.values().cloned().collect();
+
+        devices.sort_by(|a, b| {
+            let rank_a = status_rank(&a.status);
+            let rank_b = status_rank(&b.status);
+
+            rank_a
+                .cmp(&rank_b)
+                .then_with(|| match self.sort_mode {
+                    SortMode::Ip => a.ip.cmp(&b.ip),
+                    SortMode::AliveDuration => {
+                        let da = a.last_seen.signed_duration_since(a.first_seen);
+                        let db = b.last_seen.signed_duration_since(b.first_seen);
+                        db.cmp(&da).then_with(|| a.ip.cmp(&b.ip))
+                    }
+                })
+                .then_with(|| {
+                    if matches!(a.status, DeviceUIStatus::Offline | DeviceUIStatus::Lost)
+                        && matches!(b.status, DeviceUIStatus::Offline | DeviceUIStatus::Lost)
+                    {
+                        b.offline_at.cmp(&a.offline_at)
+                    } else {
+                        Ordering::Equal
+                    }
+                })
         });
-        online.extend(unstable);
-        online.extend(offline);
-        online
+
+        devices
     }
 
     /// 计算可见范围，并修正 highlight_index 和 scroll_offset，返回 (start_idx, end_idx, highlight_index, scroll_offset)
