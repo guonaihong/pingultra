@@ -747,11 +747,29 @@ impl CharacterUI {
         let mac_width: usize = 13;
         let hostname_width: usize = 18;
         let vendor_width: usize = 13;
+        // 检查设备是否在10秒内新上线
+        let is_recently_online = device.last_status_change.elapsed().as_secs() <= 10
+            && (device.status == DeviceUIStatus::Online || device.status == DeviceUIStatus::New);
+
         let (status_str, status_style) = match device.status {
-            DeviceUIStatus::Online => (" Online ", Color::Green),
+            DeviceUIStatus::Online => (
+                " Online ",
+                if is_recently_online {
+                    Color::Cyan
+                } else {
+                    Color::Green
+                },
+            ),
             DeviceUIStatus::Offline => (" Offline ", Color::Red),
             DeviceUIStatus::Unstable => (" Unstable ", Color::Yellow),
-            DeviceUIStatus::New => (" New ", Color::Yellow),
+            DeviceUIStatus::New => (
+                " New ",
+                if is_recently_online {
+                    Color::Cyan
+                } else {
+                    Color::Yellow
+                },
+            ),
             DeviceUIStatus::Lost => (" Lost ", Color::Red),
         };
 
@@ -880,7 +898,7 @@ impl CharacterUI {
             lost
         );
 
-        let help = "按键: [q]退出 [Enter]详情 [s]切换排序 [↑/↓/j/k]导航";
+        let help = "按键: [q]退出 [Enter]详情 [s]切换排序 [↑/↓/j/k]导航 | 青色Status=10秒内新上线";
 
         execute!(
             stdout,
