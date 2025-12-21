@@ -164,6 +164,7 @@ impl NetworkMonitor {
                         }
                         DeviceStatus::Removed(device) => {
                             // eprintln!("UI mode: Marking device {} as offline", device.ip);
+                            ui_instance.update_device(device, DeviceUIStatus::Offline);
                             ui_instance.update_device_status(&device.ip, false);
                         }
                         DeviceStatus::Stable(device) => {
